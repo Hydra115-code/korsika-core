@@ -4,9 +4,9 @@ import { useConversation } from "@11labs/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { 
-  Mic, MicOff, MapPin, Image as ImageIcon, BrainCircuit, 
-  LayoutDashboard, Menu, Send, Sparkles, LogOut, 
-  Activity, Navigation, Eye, Satellite, Music, MessageCircle, BellRing, X, Minimize2
+  Mic, MicOff, MapPin, BrainCircuit, 
+  LayoutDashboard, Menu, Send, LogOut, 
+  Navigation, Eye, Satellite, Music, BellRing, X, Minimize2
 } from "lucide-react";
 import { askGemini, analyzeRoadImage } from "./actions"; 
 
@@ -28,15 +28,15 @@ export default function KorsikaHome() {
   const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // --- ESTADOS ---
+  // --- STATES ---
   const [userLocation, setUserLocation] = useState<string | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'searching' | 'locked' | 'error'>('searching');
   const [isDriverMode, setIsDriverMode] = useState(false);
   const [lastNotification, setLastNotification] = useState<{sender: string, text: string} | null>(null);
   
-  // 🗺️ Navegación + Memoria de última ruta
+  // 🗺️ Navigation + Last Route Memory
   const [activeNavigation, setActiveNavigation] = useState<{destination: string} | null>(null);
-  const [lastDestination, setLastDestination] = useState<string | null>(null); // Para recordar la ruta si se cierra
+  const [lastDestination, setLastDestination] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,20 +47,42 @@ export default function KorsikaHome() {
   const messagesRef = useRef<Message[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  // 1. GPS
+  // 1. AUTO GPS (Silent attempt)
   useEffect(() => {
     if (!("geolocation" in navigator)) { setGpsStatus('error'); return; }
-    const watchId = navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (p) => {
           const loc = `${p.coords.latitude.toFixed(4)},${p.coords.longitude.toFixed(4)}`;
           setUserLocation(loc);
           setGpsStatus('locked');
       },
-      (e) => { console.error("Error GPS:", e); setGpsStatus('error'); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      (e) => { console.log("Auto GPS failed, waiting for manual trigger."); }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  // 📍 MANUAL GPS TRIGGER
+  const activarGPSManual = () => {
+    setGpsStatus('searching');
+    if (!("geolocation" in navigator)) { 
+        alert("Your device does not support GPS.");
+        setGpsStatus('error'); 
+        return; 
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+        (p) => {
+            const loc = `${p.coords.latitude.toFixed(4)},${p.coords.longitude.toFixed(4)}`;
+            setUserLocation(loc);
+            setGpsStatus('locked');
+        },
+        (e) => {
+            console.error("GPS Error:", e);
+            alert("Please allow location access in your browser to use the map.");
+            setGpsStatus('error');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
 
   // 2. DRIVER MODE
   useEffect(() => {
@@ -93,15 +115,15 @@ export default function KorsikaHome() {
     });
   }, []);
 
-  // 4. PROCESADOR VISUAL (Ahora con comandos de UI)
+  // 4. VISUAL PROCESSOR
   const processVisuals = useCallback((responseText: string) => {
-      if (!responseText) return "Procesando...";
+      if (!responseText) return "Processing...";
       const navMatch = responseText.match(/\[NAV:\s*(.*?)\]/);
       const locMatch = responseText.match(/\[LOC:\s*(.*?)\]/);
       const imgMatch = responseText.match(/\[IMG:\s*(.*?)\]/);
       const musicMatch = responseText.match(/\[MUSIC:\s*(.*?)\]/);
       const wapMatch = responseText.match(/\[WHATSAPP:\s*(.*?)\]/);
-      const uiMatch = responseText.match(/\[UI:\s*(.*?)\]/); // Nuevo comando UI
+      const uiMatch = responseText.match(/\[UI:\s*(.*?)\]/);
 
       let cleanText = responseText
           .replace(/\[NAV:.*?\]/, '')
@@ -112,13 +134,13 @@ export default function KorsikaHome() {
           .replace(/\[UI:.*?\]/, '')
           .trim();
 
-      if (!cleanText) cleanText = "Hecho.";
+      if (!cleanText) cleanText = "Done.";
 
       if (navMatch) {
           const dest = navMatch[1];
           addMessage('ai', cleanText, 'nav', dest);
           setActiveNavigation({ destination: dest });
-          setLastDestination(dest); // Guardamos la ruta por si la cierra y la vuelve a pedir
+          setLastDestination(dest);
       } else if (locMatch) {
           const place = locMatch[1];
           addMessage('ai', cleanText, 'location', place);
@@ -136,14 +158,12 @@ export default function KorsikaHome() {
       } else if (uiMatch) {
           const command = uiMatch[1];
           if (command === "CLOSE_MAP") {
-              setActiveNavigation(null); // Cierra el mapa
+              setActiveNavigation(null);
           } else if (command === "OPEN_MAP") {
-              // Si había una ruta previa, la recuperamos
               if (lastDestination) {
                   setActiveNavigation({ destination: lastDestination });
               } else {
-                  // Si no hay ruta previa, mostramos ubicación actual (default)
-                  addMessage('ai', "No hay ruta activa, mostrando ubicación.", 'location', userLocation || "Current Location");
+                  addMessage('ai', "No active route, showing location.", 'location', userLocation || "Current Location");
               }
           }
           addMessage('ai', cleanText, 'gemini');
@@ -157,19 +177,19 @@ export default function KorsikaHome() {
     consultGemini: async (p: { query: string }) => {
         try {
             const contextInfo = lastNotification 
-               ? `Notificación pendiente de ${lastNotification.sender}: "${lastNotification.text}".`
+               ? `Pending notification from ${lastNotification.sender}: "${lastNotification.text}".`
                : "";
             const res = await askGemini(p.query, userLocation || undefined, contextInfo);
             return processVisuals(res);
-        } catch (e) { return "Error técnico."; }
+        } catch (e) { return "Technical error."; }
     },
     Showmap: async (p: { location: string }) => { 
-        addMessage('ai', `Mapa de ${p.location}`, 'location', p.location); 
-        return "Mapa mostrado."; 
+        addMessage('ai', `Map of ${p.location}`, 'location', p.location); 
+        return "Map displayed."; 
     },
     GenerateImage: async (p: { prompt: string }) => { 
-        addMessage('ai', `Generando: ${p.prompt}`, 'image', p.prompt); 
-        return "Imagen generada."; 
+        addMessage('ai', `Generating: ${p.prompt}`, 'image', p.prompt); 
+        return "Image generated."; 
     }
   }), [addMessage, processVisuals, userLocation, lastNotification]);
 
@@ -185,15 +205,15 @@ export default function KorsikaHome() {
   const { status, isSpeaking } = conversation;
 
   const simulateIncomingMessage = async () => {
-      const sender = "Mamá";
-      const msgText = "¿A qué hora llegas?";
+      const sender = "Mom";
+      const msgText = "What time are you arriving?";
       setLastNotification({ sender, text: msgText });
-      const alertText = `🔔 Mensaje de ${sender}: "${msgText}"`;
+      const alertText = `🔔 Message from ${sender}: "${msgText}"`;
       addMessage('ai', alertText, 'text');
       
       if (status === 'connected') {
           // @ts-ignore
-          await (conversation as any).sendMessage(`[SYSTEM ALERT] Notificación de ${sender}: "${msgText}".`);
+          await (conversation as any).sendMessage(`[SYSTEM ALERT] Notification from ${sender}: "${msgText}".`);
       }
   };
 
@@ -206,7 +226,7 @@ export default function KorsikaHome() {
     if (status !== 'connected') {
         setIsProcessing(true);
         try {
-            const contextInfo = lastNotification ? `Notificación: ${lastNotification.text}` : "";
+            const contextInfo = lastNotification ? `Notification: ${lastNotification.text}` : "";
             const res = await askGemini(t, userLocation || undefined, contextInfo);
             processVisuals(res);
         } catch (e) { addMessage('ai', "Error.", 'text'); }
@@ -217,7 +237,7 @@ export default function KorsikaHome() {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#050505] text-white font-sans overflow-hidden relative selection:bg-cyan-500/30">
       
-      {/* FONDO AURORA */}
+      {/* AURORA BACKGROUND */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-purple-900/30 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
           <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-pink-900/20 rounded-full blur-[100px] mix-blend-screen" />
@@ -240,7 +260,7 @@ export default function KorsikaHome() {
         <button className="mb-4 text-gray-500 hover:text-red-400 transition p-3 hover:bg-white/5 rounded-xl cursor-pointer"><LogOut size={20}/></button>
       </aside>
 
-      {/* MENÚ MÓVIL (NUEVO CÓDIGO AGREGADO) */}
+      {/* MOBILE MENU */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div 
@@ -266,7 +286,7 @@ export default function KorsikaHome() {
               </button>
 
               <button onClick={() => { setIsDriverMode(!isDriverMode); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${isDriverMode ? 'bg-red-500/20 text-red-400' : 'text-gray-300'}`}>
-                <Eye size={24}/> {isDriverMode ? 'Desactivar Cámara' : 'Modo Conductor'}
+                <Eye size={24}/> {isDriverMode ? 'Disable Camera' : 'Driver Mode'}
               </button>
             </nav>
           </motion.div>
@@ -276,7 +296,7 @@ export default function KorsikaHome() {
       {/* MAIN */}
       <main className="flex-1 flex flex-col md:flex-row relative h-full z-10 overflow-hidden">
         
-        {/* MAPA SPLIT */}
+        {/* MAP SPLIT */}
         <AnimatePresence mode="popLayout">
             {activeNavigation && (
                 <motion.div 
@@ -291,7 +311,7 @@ export default function KorsikaHome() {
                     </div>
                     <button onClick={() => setActiveNavigation(null)} className="absolute top-4 right-4 z-20 p-2 bg-black/50 hover:bg-white/20 rounded-full text-white transition"><Minimize2 size={18}/></button>
                     
-                    {/* ✅ API MAPS OFICIAL */}
+                    {/* ✅ OFFICIAL MAPS API */}
                     <iframe 
                         width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen 
                         style={{ border: 0, filter: 'grayscale(20%) invert(90%) contrast(110%)' }} 
@@ -301,7 +321,7 @@ export default function KorsikaHome() {
             )}
         </AnimatePresence>
 
-        {/* MAPA MOVIL */}
+        {/* MOBILE MAP */}
         <AnimatePresence>
             {activeNavigation && (
                 <motion.div 
@@ -326,27 +346,40 @@ export default function KorsikaHome() {
                     <div className="hidden md:block"><h1 className="text-lg font-bold text-white tracking-wide">Korsika <span className="text-purple-400">Core</span></h1></div>
                     
                     <div className="flex items-center gap-2 ml-4">
-                        <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${gpsStatus === 'locked' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'}`}>
+                        {/* 🛑 MANUAL GPS BUTTON */}
+                        <button 
+                            onClick={activarGPSManual}
+                            className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer ${gpsStatus === 'locked' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/20'}`}
+                        >
                             <Satellite size={12} className={gpsStatus === 'searching' ? 'animate-spin' : ''}/>
-                            <span>{gpsStatus === 'locked' ? 'GPS OK' : 'GPS...'}</span>
-                        </div>
+                            <span>{gpsStatus === 'locked' ? 'GPS OK' : 'ENABLE GPS'}</span>
+                        </button>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 px-4 py-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-lg pointer-events-auto">
                     <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-gray-500'}`} />
-                    <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">{status === 'connected' ? 'Voz' : 'Offline'}</span>
+                    <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">{status === 'connected' ? 'Voice' : 'Offline'}</span>
                 </div>
             </header>
 
             <div className="flex-1 overflow-y-auto pt-24 pb-40 px-4 scrollbar-hide z-20">
                 {currentView === 'dashboard' && (
                     <div className="px-4 animate-in fade-in zoom-in duration-500 mt-10">
-                        <h2 className="text-2xl font-bold mb-6">Panel de Control</h2>
+                        <h2 className="text-2xl font-bold mb-6">Control Panel</h2>
                         <div className="bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-purple-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md" onClick={simulateIncomingMessage}>
                             <BellRing className="text-purple-400"/>
                             <div>
-                                <p className="font-bold text-white">Prueba WhatsApp</p>
-                                <p className="text-xs text-gray-400">Simular mensaje entrante</p>
+                                <p className="font-bold text-white">Test WhatsApp</p>
+                                <p className="text-xs text-gray-400">Simulate incoming message</p>
+                            </div>
+                        </div>
+                        
+                        {/* Mobile GPS Button */}
+                        <div className="md:hidden mt-4 bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-yellow-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md" onClick={activarGPSManual}>
+                            <Satellite className={gpsStatus === 'locked' ? "text-green-400" : "text-yellow-400"}/>
+                            <div>
+                                <p className="font-bold text-white">{gpsStatus === 'locked' ? 'GPS Connected' : 'Enable GPS'}</p>
+                                <p className="text-xs text-gray-400">{gpsStatus === 'locked' ? 'Precise location active' : 'Tap to allow location'}</p>
                             </div>
                         </div>
                     </div>
@@ -357,8 +390,8 @@ export default function KorsikaHome() {
                         {!hasStarted && (
                             <div className="flex flex-col items-center justify-center mt-20 text-center animate-in fade-in duration-1000">
                                 <BrainCircuit size={64} className="text-purple-400 mb-6 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]"/>
-                                <h2 className="text-3xl font-bold text-white">Hola, Erick</h2>
-                                <p className="text-gray-400 mt-2 text-sm">Sistemas en línea.</p>
+                                <h2 className="text-3xl font-bold text-white">Hello, Erick</h2>
+                                <p className="text-gray-400 mt-2 text-sm">Systems online.</p>
                             </div>
                         )}
 
@@ -378,7 +411,7 @@ export default function KorsikaHome() {
 
                                 {msg.type === 'location' && (
                                     <div className="mt-2 w-full max-w-lg bg-black/40 border border-purple-500/30 rounded-xl overflow-hidden">
-                                        <div className="p-3 border-b border-white/10 flex gap-2 items-center"><MapPin size={16} className="text-purple-400"/><span className="text-xs font-bold">Ubicación</span></div>
+                                        <div className="p-3 border-b border-white/10 flex gap-2 items-center"><MapPin size={16} className="text-purple-400"/><span className="text-xs font-bold">Location</span></div>
                                         <iframe width="100%" height="200" frameBorder="0" style={{border:0}} src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(msg.metadata || '')}`}></iframe>
                                     </div>
                                 )}
@@ -386,7 +419,7 @@ export default function KorsikaHome() {
                                 {msg.type === 'nav' && !activeNavigation && (
                                     <div className="mt-2">
                                         <button onClick={() => setActiveNavigation({destination: msg.metadata || ''})} className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition">
-                                            <Navigation size={14}/> Abrir Mapa
+                                            <Navigation size={14}/> Open Map
                                         </button>
                                     </div>
                                 )}
@@ -404,7 +437,7 @@ export default function KorsikaHome() {
                         {hasStarted && !status && (
                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="w-full">
                                 <div className="w-full bg-[#151515]/80 border border-white/10 rounded-full px-2 py-1.5 shadow-xl flex items-center gap-2 backdrop-blur-md">
-                                    <input value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendText()} placeholder="Comandos..." className="flex-1 bg-transparent border-none outline-none text-gray-200 px-4 text-sm h-9 placeholder-gray-600"/>
+                                    <input value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendText()} placeholder="Commands..." className="flex-1 bg-transparent border-none outline-none text-gray-200 px-4 text-sm h-9 placeholder-gray-600"/>
                                     <button onClick={handleSendText} className="p-2 bg-white/10 rounded-full hover:bg-cyan-500 hover:text-black transition text-gray-400"><Send size={16}/></button>
                                 </div>
                             </motion.div>

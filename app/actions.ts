@@ -6,14 +6,14 @@ import { searchGoogle } from "@/lib/search";
 const apiKey = process.env.GOOGLE_API_KEY!;
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// 👁️ ANÁLISIS DE CARRETERA
+// 👁️ ROAD ANALYSIS
 export async function analyzeRoadImage(imageBase64: string) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
     const result = await model.generateContent([
-      "Eres un copiloto de seguridad. Si la imagen es segura, responde SOLO 'SAFE'. Si hay peligro (choque, peatón), describe el peligro en 3 palabras.",
+      "You are a safety co-pilot. If the image is safe, respond ONLY 'SAFE'. If there is danger (crash, pedestrian, red light), describe the danger in 3 words.",
       { inlineData: { data: cleanBase64, mimeType: "image/jpeg" } }
     ]);
 
@@ -24,11 +24,12 @@ export async function analyzeRoadImage(imageBase64: string) {
   }
 }
 
-// CHAT PRINCIPAL
+// MAIN CHAT
 export async function askGemini(prompt: string, userLocation?: string, contextInfo?: string) {
   try {
     let googleData = "";
-    if (prompt.match(/clima|precio|hora|fecha|noticia/i)) {
+    // Translated keywords to trigger Google Search
+    if (prompt.match(/weather|price|time|date|news|traffic|score/i)) {
        try {
          const results = await searchGoogle(prompt);
          if (results?.length) googleData = results.slice(0, 1).map((r: any) => r.snippet).join(" | ");
@@ -36,29 +37,29 @@ export async function askGemini(prompt: string, userLocation?: string, contextIn
     }
 
     const now = new Date();
-    const horaStr = now.toLocaleTimeString('es-MX');
+    const timeStr = now.toLocaleTimeString('en-US');
 
     const systemPrompt = `
-    Eres Korsika (v2.5), Copiloto de Viaje Inteligente (Estilo Cyberpunk).
+    You are Korsika (v2.5), Smart Travel Co-pilot (Cyberpunk Style).
     
-    [DATOS]
-    - Hora: ${horaStr}
-    - GPS: ${userLocation || "Desconocida"}
+    [DATA]
+    - Time: ${timeStr}
+    - GPS: ${userLocation || "Unknown"}
     - Info: ${googleData}
-    - Notif: ${contextInfo || "Ninguna"}
+    - Notif: ${contextInfo || "None"}
 
-    [COMANDOS - ÚSALOS AL FINAL DE TU RESPUESTA]
-    1. RUTA: "Trazando ruta a [Destino]" -> [NAV: Destino]
-    2. UBICACIÓN: "Mapa de [Lugar]" -> [LOC: Lugar]
-    3. MÚSICA: "Poniendo [Canción] en Spotify" -> [MUSIC: Canción]
-    4. WHATSAPP: "Mensaje enviado a [Nombre]" -> [WHATSAPP: Nombre]
-    5. INTERFAZ:
-       - Si piden cerrar/quitar mapa: "Cerrando mapa." -> [UI: CLOSE_MAP]
-       - Si piden abrir/mostrar mapa: "Abriendo mapa." -> [UI: OPEN_MAP]
+    [COMMANDS - USE THESE AT THE END OF YOUR RESPONSE]
+    1. ROUTE: "Plotting route to [Dest]" -> [NAV: Dest]
+    2. LOCATION: "Map of [Place]" -> [LOC: Place]
+    3. MUSIC: "Playing [Song] on Spotify" -> [MUSIC: Song]
+    4. WHATSAPP: "Message sent to [Name]" -> [WHATSAPP: Name]
+    5. INTERFACE:
+       - If asked to close/hide map: "Closing map." -> [UI: CLOSE_MAP]
+       - If asked to open/show map: "Opening map." -> [UI: OPEN_MAP]
     
-    Sé breve, útil y con personalidad.
+    Be brief, helpful, and have a cool personality. Respond in English.
 
-    Usuario: ${prompt}
+    User: ${prompt}
     `;
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -67,6 +68,6 @@ export async function askGemini(prompt: string, userLocation?: string, contextIn
 
   } catch (error: any) {
     console.error(error);
-    return "Sistemas reiniciando..."; 
+    return "Systems rebooting..."; 
   }
 }
