@@ -6,83 +6,67 @@ import { searchGoogle } from "@/lib/search";
 const apiKey = process.env.GOOGLE_API_KEY!;
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// 👁️ NUEVA FUNCIÓN: ANÁLISIS DE CARRETERA (DRIVER MODE)
+// 👁️ ANÁLISIS DE CARRETERA
 export async function analyzeRoadImage(imageBase64: string) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    // Limpiamos el formato base64 para que Gemini lo entienda
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
-    const prompt = `
-      Eres Korsika en MODO COPILOTO DE SEGURIDAD. Analiza esta vista de la carretera en tiempo real.
-      
-      TU MISIÓN:
-      Detecta riesgos inmediatos para el conductor.
-      - Distancia del auto de enfrente.
-      - Semáforos (Rojo/Verde).
-      - Peatones o ciclistas peligrosos.
-      - Señales de tráfico importantes.
-
-      RESPUESTA (SOLO SI HAY ALGO QUE DECIR):
-      - Si todo es normal/seguro, responde: "SAFE" (y nada más).
-      - Si hay riesgo o algo notable, responde con una frase CORTA y ALERTA para ser leída en voz alta.
-      Ejemplo: "Cuidado, el auto rojo frenó." o "Semáforo en rojo adelante."
-    `;
-
     const result = await model.generateContent([
-      prompt,
+      "Eres un copiloto de seguridad. Si la imagen es segura, responde SOLO 'SAFE'. Si hay peligro (choque, peatón), describe el peligro en 3 palabras.",
       { inlineData: { data: cleanBase64, mimeType: "image/jpeg" } }
     ]);
 
     const text = result.response.text();
-    return text.includes("SAFE") ? null : text; // Si es seguro, no decimos nada para no molestar.
-
+    return text.includes("SAFE") ? null : text;
   } catch (error) {
-    console.error("Error visión:", error);
     return null;
   }
 }
 
-// TU FUNCIÓN DE CHAT NORMAL (CON GPS)
-export async function askGemini(prompt: string, userLocation?: string) {
+// CHAT PRINCIPAL
+export async function askGemini(prompt: string, userLocation?: string, contextInfo?: string) {
   try {
     let googleData = "";
-    // Solo buscamos si la pregunta lo amerita
-    if (prompt.match(/hora|clima|tiempo|fecha|donde|quien|precio|noticia|cuanto cuesta|buscar|llegar|ruta|camino/i)) {
-        try {
-            const results = await searchGoogle(prompt);
-            if (results?.length) googleData = results.slice(0, 2).map((r: any) => r.snippet).join(" | ");
-        } catch (e) { console.log("Salto búsqueda."); }
+    if (prompt.match(/clima|precio|hora|fecha|noticia/i)) {
+       try {
+         const results = await searchGoogle(prompt);
+         if (results?.length) googleData = results.slice(0, 1).map((r: any) => r.snippet).join(" | ");
+       } catch (e) {}
     }
 
     const now = new Date();
-    const fechaStr = now.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const horaStr = now.toLocaleTimeString('es-MX');
 
-    const context = `
-    Eres Korsika (v2.5), Copiloto de Viaje Inteligente.
+    const systemPrompt = `
+    Eres Korsika (v2.5), Copiloto de Viaje Inteligente (Estilo Cyberpunk).
     
-    [SISTEMA]
-    - Fecha: ${fechaStr} | Hora: ${horaStr}
-    - Info Web: ${googleData || "N/A"}
-    - Ubicación (GPS): ${userLocation ? userLocation : "Desconocida"}
+    [DATOS]
+    - Hora: ${horaStr}
+    - GPS: ${userLocation || "Desconocida"}
+    - Info: ${googleData}
+    - Notif: ${contextInfo || "Ninguna"}
 
-    [MODOS DE RESPUESTA]
-    1. Si piden RUTA/IR: Usa [NAV: Destino, Ciudad].
-    2. Si piden UBICACIÓN: Usa [LOC: Lugar].
-    3. Si piden IMAGEN: Usa [IMG: descripción].
+    [COMANDOS - ÚSALOS AL FINAL DE TU RESPUESTA]
+    1. RUTA: "Trazando ruta a [Destino]" -> [NAV: Destino]
+    2. UBICACIÓN: "Mapa de [Lugar]" -> [LOC: Lugar]
+    3. MÚSICA: "Poniendo [Canción] en Spotify" -> [MUSIC: Canción]
+    4. WHATSAPP: "Mensaje enviado a [Nombre]" -> [WHATSAPP: Nombre]
+    5. INTERFAZ:
+       - Si piden cerrar/quitar mapa: "Cerrando mapa." -> [UI: CLOSE_MAP]
+       - Si piden abrir/mostrar mapa: "Abriendo mapa." -> [UI: OPEN_MAP]
     
-    Sé breve, carismática y útil. Eres una copiloto humana, no un robot.
+    Sé breve, útil y con personalidad.
 
     Usuario: ${prompt}
     `;
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(context);
+    const result = await model.generateContent(systemPrompt);
     return result.response.text();
 
   } catch (error: any) {
-    return "Reconectando sistemas..."; 
+    console.error(error);
+    return "Sistemas reiniciando..."; 
   }
 }

@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Korsika - AI Copilot 🚗🟣
 
-## Getting Started
+Korsika is a futuristic, voice-activated AI co-pilot designed for the web. It integrates real-time navigation, music control, and computer vision safety features into a unified, hands-free dashboard.
 
-First, run the development server:
+## 🏆 Hackathon Submission
+Built for the **AI Partner Catalyst: Accelerate Innovation** Hackathon.
 
-```bash
+## ✨ Features
+- **Voice-First Interface:** Talk to Korsika naturally using ElevenLabs & Gemini.
+- **Smart Navigation:** Real-time Google Maps routing with Split-Screen UI.
+- **Driver Mode:** Visual road analysis using the camera (Gemini Vision).
+- **Media Control:** Voice commands to open songs in Spotify.
+- **Context Aware:** Knows your location, time, and notifications.
+
+## 🚀 Tech Stack
+- **Framework:** Next.js 14 (App Router)
+- **AI:** Google Gemini 1.5 Flash
+- **Voice:** ElevenLabs
+- **Maps:** Google Maps Embed API
+- **Styling:** Tailwind CSS + Framer Motion
+
+## 🛠️ Installation & Setup
+
+1. **Clone the repo:**
+   ```bash
+   git clone [https://github.com/tu-usuario/korsika-core.git](https://github.com/Hydra115-code/korsika-core.git)
+   cd korsika-core
+Install dependencies:
+
+Bash
+
+npm install
+Set up Environment Variables: Create a .env.local file and add:
+
+Bash
+
+GOOGLE_API_KEY=your_gemini_key
+NEXT_PUBLIC_GOOGLE_MAPS_KEY=your_maps_key
+NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_elevenlabs_id
+Run the development server:
+
+Bash
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
