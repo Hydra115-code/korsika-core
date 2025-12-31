@@ -46,7 +46,7 @@ export default function KorsikaHome() {
   const messagesRef = useRef<Message[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  // 1. AUTO GPS
+  // 1. AUTO GPS (Silent)
   useEffect(() => {
     if (!("geolocation" in navigator)) { setGpsStatus('error'); return; }
     navigator.geolocation.getCurrentPosition(
@@ -55,30 +55,46 @@ export default function KorsikaHome() {
           setUserLocation(loc);
           setGpsStatus('locked');
       },
-      (e) => { console.log("Auto GPS failed, waiting for manual trigger."); }
+      (e) => console.log("Silent GPS fail (waiting manual trigger)"),
+      { enableHighAccuracy: true }
     );
   }, []);
 
-  // 📍 MANUAL GPS
+  // 📍 MANUAL GPS (Con alertas reales para depurar en móvil)
   const activarGPSManual = () => {
     setGpsStatus('searching');
+    
+    // Check de seguridad SSL para móviles
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1')) {
+        alert("⚠️ GPS ERROR: En celulares, el GPS solo funciona si usas HTTPS (Vercel/Netlify) o Localhost. No funciona por IP de red.");
+        setGpsStatus('error');
+        return;
+    }
+
     if (!("geolocation" in navigator)) { 
-        alert("Your device does not support GPS.");
+        alert("Tu dispositivo no soporta GPS.");
         setGpsStatus('error'); 
         return; 
     }
+
     navigator.geolocation.getCurrentPosition(
         (p) => {
             const loc = `${p.coords.latitude.toFixed(4)},${p.coords.longitude.toFixed(4)}`;
             setUserLocation(loc);
             setGpsStatus('locked');
+            // Opcional: Centrar mapa si ya hay navegación
         },
         (e) => {
             console.error("GPS Error:", e);
-            alert("Please allow location access in your browser to use the map.");
+            let errorMsg = "Error desconocido.";
+            if (e.code === 1) errorMsg = "Permiso denegado. Activa la ubicación en tu navegador.";
+            if (e.code === 2) errorMsg = "Ubicación no disponible (señal débil).";
+            if (e.code === 3) errorMsg = "Tiempo de espera agotado.";
+            
+            alert(`GPS Falló: ${errorMsg}`);
             setGpsStatus('error');
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
@@ -88,7 +104,10 @@ export default function KorsikaHome() {
     if (isDriverMode) {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(stream => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }})
-            .catch(e => setIsDriverMode(false));
+            .catch(e => {
+                alert("Error cámara: Asegúrate de usar HTTPS.");
+                setIsDriverMode(false);
+            });
         interval = setInterval(async () => {
             if (videoRef.current && canvasRef.current) {
                 const v = videoRef.current;
@@ -141,14 +160,10 @@ export default function KorsikaHome() {
           setLastDestination(dest);
       } else if (uiMatch) {
           const command = uiMatch[1];
-          if (command === "CLOSE_MAP") {
-              setActiveNavigation(null); 
-          } else if (command === "OPEN_MAP") {
-              if (lastDestination) {
-                  setActiveNavigation({ destination: lastDestination });
-              } else {
-                  addMessage('ai', "Showing your current location.", 'location', userLocation || "Current Location");
-              }
+          if (command === "CLOSE_MAP") setActiveNavigation(null); 
+          else if (command === "OPEN_MAP") {
+              if (lastDestination) setActiveNavigation({ destination: lastDestination });
+              else addMessage('ai', "Showing location.", 'location', userLocation || "Current Location");
           }
           addMessage('ai', cleanText, 'gemini');
       } else if (locMatch) {
@@ -174,9 +189,7 @@ export default function KorsikaHome() {
   const clientTools = useMemo(() => ({
     consultGemini: async (p: { query: string }) => {
         try {
-            const contextInfo = lastNotification 
-               ? `Pending notification from ${lastNotification.sender}: "${lastNotification.text}".`
-               : "";
+            const contextInfo = lastNotification ? `Pending notification from ${lastNotification.sender}: "${lastNotification.text}".` : "";
             const res = await askGemini(p.query, userLocation || undefined, contextInfo);
             return processVisuals(res);
         } catch (e) { return "Technical error."; }
@@ -200,7 +213,7 @@ export default function KorsikaHome() {
     },
     onError: (e) => console.error(e)
   });
-  const { status, isSpeaking } = conversation;
+  const { status } = conversation;
 
   const simulateIncomingMessage = async () => {
       const sender = "Mom";
@@ -215,7 +228,7 @@ export default function KorsikaHome() {
       }
   };
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isProcessing]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isProcessing, activeNavigation]);
 
   const handleSendText = async () => {
     if (!inputText.trim()) return;
@@ -232,34 +245,23 @@ export default function KorsikaHome() {
     }
   };
 
-  // 🔊 SISTEMA DE ALERTA DE SONIDO (NUEVO)
+  // 🔊 ALERTA SONORA
   useEffect(() => {
-    // 1. Si no hay mensajes, salir
     if (messages.length === 0) return;
-
-    // 2. Revisar el último mensaje
     const lastMsg = messages[messages.length - 1];
-
-    // 3. Solo si es de la IA y tiene palabras de alerta
     if (lastMsg.role === 'ai') {
       const palabrasPeligro = ["warning", "alert", "peligro", "cuidado", "atención", "advertencia", "detected", "detectado"];
-      
-      const esPeligroso = palabrasPeligro.some(p => 
-        lastMsg.text.toLowerCase().includes(p)
-      );
-
+      const esPeligroso = palabrasPeligro.some(p => lastMsg.text.toLowerCase().includes(p));
       if (esPeligroso) {
-        console.log("🔊 Alerta de sonido activada");
-        // Asegúrate de que alerta.mp3 esté en la carpeta /public
+        console.log("🔊 Alerta de sonido");
         const audio = new Audio('/alerta.mp3');
         audio.volume = 1.0;
-        audio.play().catch(e => console.error("Error audio (Interactúa con la página primero):", e));
+        audio.play().catch(e => {});
       }
     }
   }, [messages]);
 
   return (
-    // ✨ FIX 1: Cambiado 'h-screen' a 'h-[100dvh]' para que se ajuste perfecto en celulares
     <div className="flex flex-col md:flex-row h-[100dvh] bg-[#050505] text-white font-sans overflow-hidden relative selection:bg-cyan-500/30">
       
       {/* BACKGROUND */}
@@ -285,32 +287,21 @@ export default function KorsikaHome() {
         <button className="mb-4 text-gray-500 hover:text-red-400 transition p-3 hover:bg-white/5 rounded-xl cursor-pointer"><LogOut size={20}/></button>
       </aside>
 
-      {/* MOBILE MENU (Pantalla completa al abrir hamburguesa) */}
+      {/* MOBILE MENU */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div 
-            initial={{ x: "-100%" }} 
-            animate={{ x: 0 }} 
-            exit={{ x: "-100%" }}
+            initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center gap-8 md:hidden"
           >
-            <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-6 right-6 p-4 text-gray-400 hover:text-white">
-              <X size={32} />
-            </button>
+            <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-6 right-6 p-4 text-gray-400 hover:text-white"><X size={32} /></button>
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center font-bold text-white text-3xl mb-4">K</div>
             <h2 className="text-2xl font-bold text-white mb-6">Korsika Core</h2>
-            
             <nav className="flex flex-col gap-6 w-full max-w-xs px-8">
-              <button onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'dashboard' ? 'bg-purple-600/20 text-purple-400' : 'text-gray-300'}`}>
-                <LayoutDashboard size={24}/> Dashboard
-              </button>
-              <button onClick={() => { setCurrentView('chat'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'chat' ? 'bg-cyan-600/20 text-cyan-400' : 'text-gray-300'}`}>
-                <BrainCircuit size={24}/> Chat Copilot
-              </button>
-              <button onClick={() => { setIsDriverMode(!isDriverMode); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${isDriverMode ? 'bg-red-500/20 text-red-400' : 'text-gray-300'}`}>
-                <Eye size={24}/> {isDriverMode ? 'Disable Camera' : 'Driver Mode'}
-              </button>
+              <button onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'dashboard' ? 'bg-purple-600/20 text-purple-400' : 'text-gray-300'}`}><LayoutDashboard size={24}/> Dashboard</button>
+              <button onClick={() => { setCurrentView('chat'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'chat' ? 'bg-cyan-600/20 text-cyan-400' : 'text-gray-300'}`}><BrainCircuit size={24}/> Chat Copilot</button>
+              <button onClick={() => { setIsDriverMode(!isDriverMode); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${isDriverMode ? 'bg-red-500/20 text-red-400' : 'text-gray-300'}`}><Eye size={24}/> {isDriverMode ? 'Disable Camera' : 'Driver Mode'}</button>
             </nav>
           </motion.div>
         )}
@@ -319,13 +310,32 @@ export default function KorsikaHome() {
       {/* MAIN LAYOUT */}
       <main className="flex-1 flex flex-col md:flex-row relative h-full z-10 overflow-hidden">
         
+        {/* HEADER - FIX SUPERPOSICIÓN */}
+        <header className="absolute top-0 w-full p-4 md:p-6 flex justify-between items-center z-40 pointer-events-none h-[70px]">
+            <div className="flex items-center gap-3 pointer-events-auto">
+                <div className="md:hidden"><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white/10 backdrop-blur rounded-full active:scale-95 transition"><Menu className="text-white w-6 h-6"/></button></div>
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 to-purple-600 flex md:hidden items-center justify-center font-bold text-white text-sm">K</div>
+                    <h1 className="text-lg font-bold text-white tracking-wide drop-shadow-md">Korsika <span className="text-purple-400">Core</span></h1>
+                </div>
+                <div className="hidden sm:flex items-center gap-2 ml-4">
+                    <button onClick={activarGPSManual} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer backdrop-blur-md ${gpsStatus === 'locked' ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'}`}>
+                        <Satellite size={12} className={gpsStatus === 'searching' ? 'animate-spin' : ''}/>
+                        <span>{gpsStatus === 'locked' ? 'GPS OK' : 'GPS'}</span>
+                    </button>
+                </div>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-lg pointer-events-auto">
+                <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-gray-500'}`} />
+                <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">{status === 'connected' ? 'ON' : 'OFF'}</span>
+            </div>
+        </header>
+
         {/* MAPAS (DESKTOP) */}
         <AnimatePresence mode="popLayout">
             {activeNavigation && (
                 <motion.div 
-                    initial={{ width: 0, opacity: 0 }} 
-                    animate={{ width: "50%", opacity: 1 }} 
-                    exit={{ width: 0, opacity: 0 }}
+                    initial={{ width: 0, opacity: 0 }} animate={{ width: "50%", opacity: 1 }} exit={{ width: 0, opacity: 0 }}
                     className="hidden md:block h-full relative border-r border-white/10 bg-black/20 backdrop-blur-lg"
                 >
                     <div className="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur rounded-full px-4 py-2 flex items-center gap-2 border border-green-500/30">
@@ -333,87 +343,39 @@ export default function KorsikaHome() {
                         <span className="text-xs font-bold text-white uppercase tracking-wider">{activeNavigation.destination}</span>
                     </div>
                     <button onClick={() => setActiveNavigation(null)} className="absolute top-4 right-4 z-20 p-2 bg-black/50 hover:bg-white/20 rounded-full text-white transition"><Minimize2 size={18}/></button>
-                    
-                    <iframe 
-                        width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen 
-                        style={{ border: 0, filter: 'grayscale(20%) invert(90%) contrast(110%)' }} 
-                        src={`https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_KEY}&origin=${userLocation || "current+location"}&destination=${encodeURIComponent(activeNavigation.destination)}&mode=driving`}>
-                    </iframe>
+                    <iframe width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen style={{ border: 0, filter: 'grayscale(10%) invert(90%) contrast(110%)' }} src={`https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_KEY}&origin=${userLocation || "current+location"}&destination=${encodeURIComponent(activeNavigation.destination)}&mode=driving`}></iframe>
                 </motion.div>
             )}
         </AnimatePresence>
 
-        {/* MAPAS (CELULAR - ALTURA CORREGIDA) */}
+        {/* MAPAS (CELULAR - FIX VISUALIZACIÓN) */}
+        {/* Agregado mt-[70px] para que no choque con el Header y h-[40vh] fijo */}
         <AnimatePresence>
             {activeNavigation && (
                 <motion.div 
-                    initial={{ height: 0 }} animate={{ height: "45%" }} exit={{ height: 0 }}
-                    className="md:hidden w-full relative border-b border-white/10 bg-black/20 backdrop-blur-lg"
+                    initial={{ height: 0, opacity: 0 }} animate={{ height: "45vh", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                    className="md:hidden w-full relative border-b border-white/10 bg-black/90 backdrop-blur-lg z-30 mt-[70px]"
                 >
                       <button onClick={() => setActiveNavigation(null)} className="absolute top-2 right-2 z-20 p-2 bg-black/50 rounded-full text-white"><Minimize2 size={16}/></button>
-                      <iframe 
-                        width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen 
-                        style={{ border: 0, filter: 'grayscale(20%) invert(90%) contrast(110%)' }} 
-                        src={`https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_KEY}&origin=${userLocation || "current+location"}&destination=${encodeURIComponent(activeNavigation.destination)}&mode=driving`}>
-                    </iframe>
+                      <iframe width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen style={{ border: 0, filter: 'invert(90%) contrast(110%)' }} src={`https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_KEY}&origin=${userLocation || "current+location"}&destination=${encodeURIComponent(activeNavigation.destination)}&mode=driving`}></iframe>
                 </motion.div>
             )}
         </AnimatePresence>
 
         {/* CHAT AREA */}
         <div className="flex-1 flex flex-col relative h-full">
-            
-            {/* HEADER - ✨ FIX 2: NOMBRE VISIBLE SIEMPRE + BOTÓN GPS */}
-            <header className="absolute top-0 w-full p-4 md:p-6 flex justify-between items-center z-40 pointer-events-none">
-                <div className="flex items-center gap-3 pointer-events-auto">
-                    {/* Botón hamburguesa */}
-                    <div className="md:hidden"><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white/10 backdrop-blur rounded-full active:scale-95 transition"><Menu className="text-white w-6 h-6"/></button></div>
-                    
-                    {/* Nombre Korsika - Ahora visible en móvil */}
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 to-purple-600 flex md:hidden items-center justify-center font-bold text-white text-sm">K</div>
-                        <h1 className="text-lg font-bold text-white tracking-wide drop-shadow-md">Korsika <span className="text-purple-400">Core</span></h1>
-                    </div>
-                    
-                    {/* Botón GPS - Visible también en móvil si cabe, o en dashboard */}
-                    <div className="hidden sm:flex items-center gap-2 ml-4">
-                        <button 
-                            onClick={activarGPSManual}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer backdrop-blur-md ${gpsStatus === 'locked' ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'}`}
-                        >
-                            <Satellite size={12} className={gpsStatus === 'searching' ? 'animate-spin' : ''}/>
-                            <span>{gpsStatus === 'locked' ? 'GPS OK' : 'GPS'}</span>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Status voz */}
-                <div className="flex items-center gap-3 px-4 py-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-lg pointer-events-auto">
-                    <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-gray-500'}`} />
-                    <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">{status === 'connected' ? 'ON' : 'OFF'}</span>
-                </div>
-            </header>
-
-            <div className="flex-1 overflow-y-auto pt-24 pb-40 px-4 scrollbar-hide z-20">
+            {/* FIX SCROLL: Padding dinámico. Si hay mapa, el padding top es pequeño. Si no, es grande (para evitar header) */}
+            <div className={`flex-1 overflow-y-auto pb-32 px-4 scrollbar-hide z-20 ${activeNavigation ? 'pt-2 md:pt-24' : 'pt-24'}`}>
                 {currentView === 'dashboard' && (
                     <div className="px-4 animate-in fade-in zoom-in duration-500 mt-10 pb-20">
                         <h2 className="text-2xl font-bold mb-6">Control Panel</h2>
-                        
                         <div className="bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-purple-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md mb-4" onClick={simulateIncomingMessage}>
                             <BellRing className="text-purple-400"/>
-                            <div>
-                                <p className="font-bold text-white">Test WhatsApp</p>
-                                <p className="text-xs text-gray-400">Simulate incoming message</p>
-                            </div>
+                            <div><p className="font-bold text-white">Test WhatsApp</p><p className="text-xs text-gray-400">Simulate incoming message</p></div>
                         </div>
-
-                        {/* Botón GPS Grande para Móvil */}
                         <div className="bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-yellow-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md" onClick={activarGPSManual}>
                             <Satellite className={gpsStatus === 'locked' ? "text-green-400" : "text-yellow-400"}/>
-                            <div>
-                                <p className="font-bold text-white">{gpsStatus === 'locked' ? 'GPS Connected' : 'Enable GPS'}</p>
-                                <p className="text-xs text-gray-400">{gpsStatus === 'locked' ? 'Ready for navigation' : 'Tap to allow location'}</p>
-                            </div>
+                            <div><p className="font-bold text-white">{gpsStatus === 'locked' ? 'GPS Connected' : 'Enable GPS'}</p><p className="text-xs text-gray-400">{gpsStatus === 'locked' ? 'Ready for navigation' : 'Tap to allow location'}</p></div>
                         </div>
                     </div>
                 )}
@@ -434,32 +396,24 @@ export default function KorsikaHome() {
                                 <div className={`px-5 py-3 rounded-2xl max-w-[90%] text-sm backdrop-blur-md shadow-lg ${msg.role === 'user' ? 'bg-gradient-to-br from-purple-600/20 to-blue-600/20 text-white rounded-tr-sm border border-white/10' : 'bg-white/10 text-gray-200 rounded-tl-sm border border-white/5'}`}>
                                     {msg.text}
                                 </div>
-                                
                                 {msg.type === 'music' && (
                                     <div className="mt-2 w-full max-w-xs bg-black/40 border border-green-500/30 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition" onClick={() => window.open(`https://open.spotify.com/search/$${encodeURIComponent(msg.metadata || '')}`, '_blank')}>
                                             <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-black"><Music size={20}/></div>
                                             <div className="overflow-hidden"><p className="text-xs font-bold text-white truncate">Spotify</p><p className="text-[10px] text-gray-400 truncate">{msg.metadata}</p></div>
                                     </div>
                                 )}
-
-                                {/* LOCATION CARD */}
                                 {msg.type === 'location' && (
                                     <div className="mt-2 w-full max-w-lg bg-black/40 border border-purple-500/30 rounded-xl overflow-hidden">
                                         <div className="p-3 border-b border-white/10 flex gap-2 items-center"><MapPin size={16} className="text-purple-400"/><span className="text-xs font-bold">Location</span></div>
                                         <iframe width="100%" height="200" frameBorder="0" style={{border:0}} src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(msg.metadata || '')}`}></iframe>
                                         <div className="p-3 bg-white/5 flex justify-end">
-                                             <button onClick={() => setActiveNavigation({destination: msg.metadata || ''})} className="text-xs font-bold flex items-center gap-2 text-black bg-cyan-400 hover:bg-cyan-300 transition px-4 py-2 rounded-full shadow-lg hover:scale-105 active:scale-95">
-                                                <ArrowRightCircle size={16}/> Start Navigation
-                                             </button>
+                                             <button onClick={() => setActiveNavigation({destination: msg.metadata || ''})} className="text-xs font-bold flex items-center gap-2 text-black bg-cyan-400 hover:bg-cyan-300 transition px-4 py-2 rounded-full shadow-lg hover:scale-105 active:scale-95"><ArrowRightCircle size={16}/> Start Navigation</button>
                                         </div>
                                     </div>
                                 )}
-
                                 {msg.type === 'nav' && !activeNavigation && (
                                     <div className="mt-2">
-                                        <button onClick={() => setActiveNavigation({destination: msg.metadata || ''})} className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition">
-                                            <Navigation size={14}/> Open Map
-                                        </button>
+                                        <button onClick={() => setActiveNavigation({destination: msg.metadata || ''})} className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition"><Navigation size={14}/> Open Map</button>
                                     </div>
                                 )}
                             </motion.div>
@@ -470,7 +424,7 @@ export default function KorsikaHome() {
                 )}
             </div>
 
-            {/* BARRA INFERIOR - ✨ FIX 3: AJUSTADA PARA CELULARES */}
+            {/* BARRA INFERIOR - FIX SCROLL */}
             <div className="absolute bottom-0 w-full z-50 flex flex-col items-center pb-6 md:pb-8 pt-10 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent pointer-events-none">
                 <div className="w-full max-w-2xl px-4 md:px-6 flex flex-col items-center gap-4 pointer-events-auto">
                     <AnimatePresence>
@@ -483,17 +437,11 @@ export default function KorsikaHome() {
                             </motion.div>
                         )}
                     </AnimatePresence>
-
-                    {/* Botón Micrófono */}
                     <motion.button 
                         whileTap={{ scale: 0.9 }} 
                         onClick={() => {
-                            if (status === 'connected') {
-                                conversation.endSession();
-                            } else {
-                                // @ts-ignore
-                                (conversation as any).startSession(); 
-                            }
+                            if (status === 'connected') conversation.endSession();
+                            else (conversation as any).startSession(); 
                         }} 
                         className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative z-50 cursor-pointer ${status === 'connected' ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-b from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.3)] border-4 border-[#050505]'}`}
                     >
