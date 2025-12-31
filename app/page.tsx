@@ -190,6 +190,7 @@ export default function KorsikaHome() {
       setLastNotification({ sender, text: msgText });
       const alertText = `🔔 Mensaje de ${sender}: "${msgText}"`;
       addMessage('ai', alertText, 'text');
+      
       if (status === 'connected') {
           // @ts-ignore
           await (conversation as any).sendMessage(`[SYSTEM ALERT] Notificación de ${sender}: "${msgText}".`);
@@ -225,7 +226,7 @@ export default function KorsikaHome() {
       <video ref={videoRef} className={`fixed top-4 right-4 w-24 h-32 object-cover rounded-xl border border-red-500/50 shadow-2xl z-[60] transition-all duration-500 ${isDriverMode ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-10 pointer-events-none'}`} muted playsInline />
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR DESKTOP */}
       <aside className="hidden md:flex w-20 bg-white/5 backdrop-blur-xl border-r border-white/5 flex-col items-center py-8 z-50 shadow-2xl relative">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-400 to-purple-600 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center font-bold text-white mb-10">K</div>
         <nav className="flex flex-col gap-6 w-full items-center flex-1 cursor-pointer">
@@ -238,6 +239,39 @@ export default function KorsikaHome() {
         </nav>
         <button className="mb-4 text-gray-500 hover:text-red-400 transition p-3 hover:bg-white/5 rounded-xl cursor-pointer"><LogOut size={20}/></button>
       </aside>
+
+      {/* MENÚ MÓVIL (NUEVO CÓDIGO AGREGADO) */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div 
+            initial={{ x: "-100%" }} 
+            animate={{ x: 0 }} 
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center gap-8 md:hidden"
+          >
+            <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-6 right-6 p-2 text-gray-400 hover:text-white">
+              <X size={32} />
+            </button>
+
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center font-bold text-white text-2xl mb-4">K</div>
+            
+            <nav className="flex flex-col gap-6 w-full max-w-xs px-8">
+              <button onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'dashboard' ? 'bg-purple-600/20 text-purple-400' : 'text-gray-300'}`}>
+                <LayoutDashboard size={24}/> Dashboard
+              </button>
+              
+              <button onClick={() => { setCurrentView('chat'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'chat' ? 'bg-cyan-600/20 text-cyan-400' : 'text-gray-300'}`}>
+                <BrainCircuit size={24}/> Chat Copilot
+              </button>
+
+              <button onClick={() => { setIsDriverMode(!isDriverMode); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${isDriverMode ? 'bg-red-500/20 text-red-400' : 'text-gray-300'}`}>
+                <Eye size={24}/> {isDriverMode ? 'Desactivar Cámara' : 'Modo Conductor'}
+              </button>
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* MAIN */}
       <main className="flex-1 flex flex-col md:flex-row relative h-full z-10 overflow-hidden">
@@ -378,19 +412,19 @@ export default function KorsikaHome() {
                     </AnimatePresence>
 
                     <motion.button 
-    whileTap={{ scale: 0.9 }} 
-    onClick={() => {
-        if (status === 'connected') {
-            conversation.endSession();
-        } else {
-            // @ts-ignore
-            (conversation as any).startSession(); 
-        }
-    }} 
-    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative z-50 cursor-pointer ${status === 'connected' ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-b from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.3)] border-4 border-[#050505]'}`}
->
-    {status === 'connected' ? <MicOff size={24} className="text-white"/> : <Mic size={24} className="text-white fill-white/20"/>}
-</motion.button>
+                        whileTap={{ scale: 0.9 }} 
+                        onClick={() => {
+                            if (status === 'connected') {
+                                conversation.endSession();
+                            } else {
+                                // @ts-ignore
+                                (conversation as any).startSession(); 
+                            }
+                        }} 
+                        className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative z-50 cursor-pointer ${status === 'connected' ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-b from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.3)] border-4 border-[#050505]'}`}
+                    >
+                        {status === 'connected' ? <MicOff size={24} className="text-white"/> : <Mic size={24} className="text-white fill-white/20"/>}
+                    </motion.button>
                 </div>
             </div>
         </div>
