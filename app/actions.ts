@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(apiKey);
 // 👁️ ROAD ANALYSIS
 export async function analyzeRoadImage(imageBase64: string) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
     const result = await model.generateContent([
@@ -28,7 +28,6 @@ export async function analyzeRoadImage(imageBase64: string) {
 export async function askGemini(prompt: string, userLocation?: string, contextInfo?: string) {
   try {
     let googleData = "";
-    // Translated keywords to trigger Google Search
     if (prompt.match(/weather|price|time|date|news|traffic|score/i)) {
        try {
          const results = await searchGoogle(prompt);
@@ -40,7 +39,7 @@ export async function askGemini(prompt: string, userLocation?: string, contextIn
     const timeStr = now.toLocaleTimeString('en-US');
 
     const systemPrompt = `
-    You are Korsika (v2.5), Smart Travel Co-pilot (Cyberpunk Style).
+    You are Korsika (v2.5), Smart Travel Co-pilot.
     
     [DATA]
     - Time: ${timeStr}
@@ -48,21 +47,28 @@ export async function askGemini(prompt: string, userLocation?: string, contextIn
     - Info: ${googleData}
     - Notif: ${contextInfo || "None"}
 
-    [COMMANDS - USE THESE AT THE END OF YOUR RESPONSE]
-    1. ROUTE: "Plotting route to [Dest]" -> [NAV: Dest]
-    2. LOCATION: "Map of [Place]" -> [LOC: Place]
-    3. MUSIC: "Playing [Song] on Spotify" -> [MUSIC: Song]
-    4. WHATSAPP: "Message sent to [Name]" -> [WHATSAPP: Name]
-    5. INTERFACE:
-       - If asked to close/hide map: "Closing map." -> [UI: CLOSE_MAP]
-       - If asked to open/show map: "Opening map." -> [UI: OPEN_MAP]
+    [🔥 ABSOLUTE RULE: FORCED NAVIGATION]
+    The user is driving. Static maps are useless.
+    ANY mention of a place or location implies intent to travel there.
     
-    Be brief, helpful, and have a cool personality. Respond in English.
+    1. IF user asks "Where is X?", "Map of X", "Find X", "Go to X", "Location of X" -> YOU MUST OUTPUT: [NAV: X]
+    2. NEVER output [LOC: ...]. It is forbidden. ALWAYS upgrade to [NAV: ...].
+    
+    [VOICE UI CONTROL]
+    - "Close map", "Stop", "Hide" -> [UI: CLOSE_MAP]
+    - "Open map", "Show route", "Back" -> [UI: OPEN_MAP]
+
+    [OTHER COMMANDS]
+    - Music: [MUSIC: Song]
+    - WhatsApp: [WHATSAPP: Name]
+    
+    Response format: "Setting route to [Place]... [NAV: Place]"
+    Be brief. Respond in English.
 
     User: ${prompt}
     `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(systemPrompt);
     return result.response.text();
 

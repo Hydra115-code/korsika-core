@@ -6,7 +6,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { 
   Mic, MicOff, MapPin, BrainCircuit, 
   LayoutDashboard, Menu, Send, LogOut, 
-  Navigation, Eye, Satellite, Music, BellRing, X, Minimize2
+  Navigation, Eye, Satellite, Music, BellRing, X, Minimize2, ArrowRightCircle
 } from "lucide-react";
 import { askGemini, analyzeRoadImage } from "./actions"; 
 
@@ -34,7 +34,7 @@ export default function KorsikaHome() {
   const [isDriverMode, setIsDriverMode] = useState(false);
   const [lastNotification, setLastNotification] = useState<{sender: string, text: string} | null>(null);
   
-  // 🗺️ Navigation + Last Route Memory
+  // 🗺️ Navigation States
   const [activeNavigation, setActiveNavigation] = useState<{destination: string} | null>(null);
   const [lastDestination, setLastDestination] = useState<string | null>(null);
 
@@ -43,11 +43,10 @@ export default function KorsikaHome() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const hasStarted = messages.length > 0;
-  
   const messagesRef = useRef<Message[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  // 1. AUTO GPS (Silent attempt)
+  // 1. AUTO GPS
   useEffect(() => {
     if (!("geolocation" in navigator)) { setGpsStatus('error'); return; }
     navigator.geolocation.getCurrentPosition(
@@ -60,7 +59,7 @@ export default function KorsikaHome() {
     );
   }, []);
 
-  // 📍 MANUAL GPS TRIGGER
+  // 📍 MANUAL GPS
   const activarGPSManual = () => {
     setGpsStatus('searching');
     if (!("geolocation" in navigator)) { 
@@ -68,7 +67,6 @@ export default function KorsikaHome() {
         setGpsStatus('error'); 
         return; 
     }
-    
     navigator.geolocation.getCurrentPosition(
         (p) => {
             const loc = `${p.coords.latitude.toFixed(4)},${p.coords.longitude.toFixed(4)}`;
@@ -141,6 +139,18 @@ export default function KorsikaHome() {
           addMessage('ai', cleanText, 'nav', dest);
           setActiveNavigation({ destination: dest });
           setLastDestination(dest);
+      } else if (uiMatch) {
+          const command = uiMatch[1];
+          if (command === "CLOSE_MAP") {
+              setActiveNavigation(null); 
+          } else if (command === "OPEN_MAP") {
+              if (lastDestination) {
+                  setActiveNavigation({ destination: lastDestination });
+              } else {
+                  addMessage('ai', "Showing your current location.", 'location', userLocation || "Current Location");
+              }
+          }
+          addMessage('ai', cleanText, 'gemini');
       } else if (locMatch) {
           const place = locMatch[1];
           addMessage('ai', cleanText, 'location', place);
@@ -155,18 +165,6 @@ export default function KorsikaHome() {
           const wapData = wapMatch[1];
           addMessage('ai', cleanText, 'whatsapp', wapData);
           setLastNotification(null);
-      } else if (uiMatch) {
-          const command = uiMatch[1];
-          if (command === "CLOSE_MAP") {
-              setActiveNavigation(null);
-          } else if (command === "OPEN_MAP") {
-              if (lastDestination) {
-                  setActiveNavigation({ destination: lastDestination });
-              } else {
-                  addMessage('ai', "No active route, showing location.", 'location', userLocation || "Current Location");
-              }
-          }
-          addMessage('ai', cleanText, 'gemini');
       } else {
           addMessage('ai', cleanText, 'gemini');
       }
@@ -235,9 +233,10 @@ export default function KorsikaHome() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-[#050505] text-white font-sans overflow-hidden relative selection:bg-cyan-500/30">
+    // ✨ FIX 1: Cambiado 'h-screen' a 'h-[100dvh]' para que se ajuste perfecto en celulares
+    <div className="flex flex-col md:flex-row h-[100dvh] bg-[#050505] text-white font-sans overflow-hidden relative selection:bg-cyan-500/30">
       
-      {/* AURORA BACKGROUND */}
+      {/* BACKGROUND */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-purple-900/30 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
           <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-pink-900/20 rounded-full blur-[100px] mix-blend-screen" />
@@ -246,7 +245,7 @@ export default function KorsikaHome() {
       <video ref={videoRef} className={`fixed top-4 right-4 w-24 h-32 object-cover rounded-xl border border-red-500/50 shadow-2xl z-[60] transition-all duration-500 ${isDriverMode ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-10 pointer-events-none'}`} muted playsInline />
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* SIDEBAR DESKTOP */}
+      {/* SIDEBAR (Desktop) */}
       <aside className="hidden md:flex w-20 bg-white/5 backdrop-blur-xl border-r border-white/5 flex-col items-center py-8 z-50 shadow-2xl relative">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-400 to-purple-600 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center font-bold text-white mb-10">K</div>
         <nav className="flex flex-col gap-6 w-full items-center flex-1 cursor-pointer">
@@ -260,7 +259,7 @@ export default function KorsikaHome() {
         <button className="mb-4 text-gray-500 hover:text-red-400 transition p-3 hover:bg-white/5 rounded-xl cursor-pointer"><LogOut size={20}/></button>
       </aside>
 
-      {/* MOBILE MENU */}
+      {/* MOBILE MENU (Pantalla completa al abrir hamburguesa) */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div 
@@ -268,23 +267,21 @@ export default function KorsikaHome() {
             animate={{ x: 0 }} 
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center gap-8 md:hidden"
+            className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center gap-8 md:hidden"
           >
-            <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-6 right-6 p-2 text-gray-400 hover:text-white">
+            <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-6 right-6 p-4 text-gray-400 hover:text-white">
               <X size={32} />
             </button>
-
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center font-bold text-white text-2xl mb-4">K</div>
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center font-bold text-white text-3xl mb-4">K</div>
+            <h2 className="text-2xl font-bold text-white mb-6">Korsika Core</h2>
             
             <nav className="flex flex-col gap-6 w-full max-w-xs px-8">
               <button onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'dashboard' ? 'bg-purple-600/20 text-purple-400' : 'text-gray-300'}`}>
                 <LayoutDashboard size={24}/> Dashboard
               </button>
-              
               <button onClick={() => { setCurrentView('chat'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${currentView === 'chat' ? 'bg-cyan-600/20 text-cyan-400' : 'text-gray-300'}`}>
                 <BrainCircuit size={24}/> Chat Copilot
               </button>
-
               <button onClick={() => { setIsDriverMode(!isDriverMode); setIsMobileMenuOpen(false); }} className={`flex items-center gap-4 text-xl p-4 rounded-xl border border-white/10 ${isDriverMode ? 'bg-red-500/20 text-red-400' : 'text-gray-300'}`}>
                 <Eye size={24}/> {isDriverMode ? 'Disable Camera' : 'Driver Mode'}
               </button>
@@ -293,10 +290,10 @@ export default function KorsikaHome() {
         )}
       </AnimatePresence>
 
-      {/* MAIN */}
+      {/* MAIN LAYOUT */}
       <main className="flex-1 flex flex-col md:flex-row relative h-full z-10 overflow-hidden">
         
-        {/* MAP SPLIT */}
+        {/* MAPAS (DESKTOP) */}
         <AnimatePresence mode="popLayout">
             {activeNavigation && (
                 <motion.div 
@@ -311,7 +308,6 @@ export default function KorsikaHome() {
                     </div>
                     <button onClick={() => setActiveNavigation(null)} className="absolute top-4 right-4 z-20 p-2 bg-black/50 hover:bg-white/20 rounded-full text-white transition"><Minimize2 size={18}/></button>
                     
-                    {/* ✅ OFFICIAL MAPS API */}
                     <iframe 
                         width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen 
                         style={{ border: 0, filter: 'grayscale(20%) invert(90%) contrast(110%)' }} 
@@ -321,11 +317,11 @@ export default function KorsikaHome() {
             )}
         </AnimatePresence>
 
-        {/* MOBILE MAP */}
+        {/* MAPAS (CELULAR - ALTURA CORREGIDA) */}
         <AnimatePresence>
             {activeNavigation && (
                 <motion.div 
-                    initial={{ height: 0 }} animate={{ height: "40%" }} exit={{ height: 0 }}
+                    initial={{ height: 0 }} animate={{ height: "45%" }} exit={{ height: 0 }}
                     className="md:hidden w-full relative border-b border-white/10 bg-black/20 backdrop-blur-lg"
                 >
                       <button onClick={() => setActiveNavigation(null)} className="absolute top-2 right-2 z-20 p-2 bg-black/50 rounded-full text-white"><Minimize2 size={16}/></button>
@@ -338,48 +334,59 @@ export default function KorsikaHome() {
             )}
         </AnimatePresence>
 
-        {/* CHAT */}
+        {/* CHAT AREA */}
         <div className="flex-1 flex flex-col relative h-full">
-            <header className="absolute top-0 w-full p-6 flex justify-between items-center z-40 pointer-events-none">
+            
+            {/* HEADER - ✨ FIX 2: NOMBRE VISIBLE SIEMPRE + BOTÓN GPS */}
+            <header className="absolute top-0 w-full p-4 md:p-6 flex justify-between items-center z-40 pointer-events-none">
                 <div className="flex items-center gap-3 pointer-events-auto">
-                    <div className="md:hidden"><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white/5 rounded-full"><Menu className="text-gray-300 w-5 h-5"/></button></div>
-                    <div className="hidden md:block"><h1 className="text-lg font-bold text-white tracking-wide">Korsika <span className="text-purple-400">Core</span></h1></div>
+                    {/* Botón hamburguesa */}
+                    <div className="md:hidden"><button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-white/10 backdrop-blur rounded-full active:scale-95 transition"><Menu className="text-white w-6 h-6"/></button></div>
                     
-                    <div className="flex items-center gap-2 ml-4">
-                        {/* 🛑 MANUAL GPS BUTTON */}
+                    {/* Nombre Korsika - Ahora visible en móvil */}
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 to-purple-600 flex md:hidden items-center justify-center font-bold text-white text-sm">K</div>
+                        <h1 className="text-lg font-bold text-white tracking-wide drop-shadow-md">Korsika <span className="text-purple-400">Core</span></h1>
+                    </div>
+                    
+                    {/* Botón GPS - Visible también en móvil si cabe, o en dashboard */}
+                    <div className="hidden sm:flex items-center gap-2 ml-4">
                         <button 
                             onClick={activarGPSManual}
-                            className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer ${gpsStatus === 'locked' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/20'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer backdrop-blur-md ${gpsStatus === 'locked' ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'}`}
                         >
                             <Satellite size={12} className={gpsStatus === 'searching' ? 'animate-spin' : ''}/>
-                            <span>{gpsStatus === 'locked' ? 'GPS OK' : 'ENABLE GPS'}</span>
+                            <span>{gpsStatus === 'locked' ? 'GPS OK' : 'GPS'}</span>
                         </button>
                     </div>
                 </div>
+
+                {/* Status voz */}
                 <div className="flex items-center gap-3 px-4 py-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-lg pointer-events-auto">
                     <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-gray-500'}`} />
-                    <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">{status === 'connected' ? 'Voice' : 'Offline'}</span>
+                    <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">{status === 'connected' ? 'ON' : 'OFF'}</span>
                 </div>
             </header>
 
             <div className="flex-1 overflow-y-auto pt-24 pb-40 px-4 scrollbar-hide z-20">
                 {currentView === 'dashboard' && (
-                    <div className="px-4 animate-in fade-in zoom-in duration-500 mt-10">
+                    <div className="px-4 animate-in fade-in zoom-in duration-500 mt-10 pb-20">
                         <h2 className="text-2xl font-bold mb-6">Control Panel</h2>
-                        <div className="bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-purple-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md" onClick={simulateIncomingMessage}>
+                        
+                        <div className="bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-purple-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md mb-4" onClick={simulateIncomingMessage}>
                             <BellRing className="text-purple-400"/>
                             <div>
                                 <p className="font-bold text-white">Test WhatsApp</p>
                                 <p className="text-xs text-gray-400">Simulate incoming message</p>
                             </div>
                         </div>
-                        
-                        {/* Mobile GPS Button */}
-                        <div className="md:hidden mt-4 bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-yellow-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md" onClick={activarGPSManual}>
+
+                        {/* Botón GPS Grande para Móvil */}
+                        <div className="bg-white/10 p-5 rounded-2xl border border-white/10 hover:border-yellow-500/30 transition shadow-lg cursor-pointer flex items-center gap-4 backdrop-blur-md" onClick={activarGPSManual}>
                             <Satellite className={gpsStatus === 'locked' ? "text-green-400" : "text-yellow-400"}/>
                             <div>
                                 <p className="font-bold text-white">{gpsStatus === 'locked' ? 'GPS Connected' : 'Enable GPS'}</p>
-                                <p className="text-xs text-gray-400">{gpsStatus === 'locked' ? 'Precise location active' : 'Tap to allow location'}</p>
+                                <p className="text-xs text-gray-400">{gpsStatus === 'locked' ? 'Ready for navigation' : 'Tap to allow location'}</p>
                             </div>
                         </div>
                     </div>
@@ -409,10 +416,16 @@ export default function KorsikaHome() {
                                     </div>
                                 )}
 
+                                {/* LOCATION CARD */}
                                 {msg.type === 'location' && (
                                     <div className="mt-2 w-full max-w-lg bg-black/40 border border-purple-500/30 rounded-xl overflow-hidden">
                                         <div className="p-3 border-b border-white/10 flex gap-2 items-center"><MapPin size={16} className="text-purple-400"/><span className="text-xs font-bold">Location</span></div>
                                         <iframe width="100%" height="200" frameBorder="0" style={{border:0}} src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(msg.metadata || '')}`}></iframe>
+                                        <div className="p-3 bg-white/5 flex justify-end">
+                                             <button onClick={() => setActiveNavigation({destination: msg.metadata || ''})} className="text-xs font-bold flex items-center gap-2 text-black bg-cyan-400 hover:bg-cyan-300 transition px-4 py-2 rounded-full shadow-lg hover:scale-105 active:scale-95">
+                                                <ArrowRightCircle size={16}/> Start Navigation
+                                             </button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -431,12 +444,13 @@ export default function KorsikaHome() {
                 )}
             </div>
 
-            <div className="absolute bottom-0 w-full z-50 flex flex-col items-center pb-8 pt-10 bg-gradient-to-t from-[#050505] via-[#050505]/90 to-transparent pointer-events-none">
-                <div className="w-full max-w-2xl px-6 flex flex-col items-center gap-4 pointer-events-auto">
+            {/* BARRA INFERIOR - ✨ FIX 3: AJUSTADA PARA CELULARES */}
+            <div className="absolute bottom-0 w-full z-50 flex flex-col items-center pb-6 md:pb-8 pt-10 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent pointer-events-none">
+                <div className="w-full max-w-2xl px-4 md:px-6 flex flex-col items-center gap-4 pointer-events-auto">
                     <AnimatePresence>
                         {hasStarted && !status && (
                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="w-full">
-                                <div className="w-full bg-[#151515]/80 border border-white/10 rounded-full px-2 py-1.5 shadow-xl flex items-center gap-2 backdrop-blur-md">
+                                <div className="w-full bg-[#151515]/90 border border-white/10 rounded-full px-2 py-1.5 shadow-xl flex items-center gap-2 backdrop-blur-md">
                                     <input value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendText()} placeholder="Commands..." className="flex-1 bg-transparent border-none outline-none text-gray-200 px-4 text-sm h-9 placeholder-gray-600"/>
                                     <button onClick={handleSendText} className="p-2 bg-white/10 rounded-full hover:bg-cyan-500 hover:text-black transition text-gray-400"><Send size={16}/></button>
                                 </div>
@@ -444,6 +458,7 @@ export default function KorsikaHome() {
                         )}
                     </AnimatePresence>
 
+                    {/* Botón Micrófono */}
                     <motion.button 
                         whileTap={{ scale: 0.9 }} 
                         onClick={() => {
@@ -461,7 +476,6 @@ export default function KorsikaHome() {
                 </div>
             </div>
         </div>
-
       </main>
     </div>
   );
