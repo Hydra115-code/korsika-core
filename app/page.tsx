@@ -377,9 +377,20 @@ export default function KorsikaHome() {
                         )}
                     </AnimatePresence>
 
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={status === 'connected' ? () => conversation.endSession() : () => conversation.startSession()} className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative z-50 cursor-pointer ${status === 'connected' ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-b from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.3)] border-4 border-[#050505]'}`}>
-                        {status === 'connected' ? <MicOff size={24} className="text-white"/> : <Mic size={24} className="text-white fill-white/20"/>}
-                    </motion.button>
+                    <motion.button 
+    whileTap={{ scale: 0.9 }} 
+    onClick={() => {
+        if (status === 'connected') {
+            conversation.endSession();
+        } else {
+            // @ts-ignore
+            (conversation as any).startSession(); 
+        }
+    }} 
+    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative z-50 cursor-pointer ${status === 'connected' ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-b from-cyan-400 to-purple-600 shadow-[0_0_30px_rgba(168,85,247,0.3)] border-4 border-[#050505]'}`}
+>
+    {status === 'connected' ? <MicOff size={24} className="text-white"/> : <Mic size={24} className="text-white fill-white/20"/>}
+</motion.button>
                 </div>
             </div>
         </div>
