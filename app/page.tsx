@@ -160,7 +160,7 @@ export default function KorsikaHome() {
       } else if (musicMatch) {
           const song = musicMatch[1];
           addMessage('ai', cleanText, 'music', song);
-          window.open(`https://open.spotify.com/search/${encodeURIComponent(song)}`, '_blank');
+          window.open(`https://open.spotify.com/search/$${encodeURIComponent(song)}`, '_blank');
       } else if (wapMatch) {
           const wapData = wapMatch[1];
           addMessage('ai', cleanText, 'whatsapp', wapData);
@@ -231,6 +231,32 @@ export default function KorsikaHome() {
         finally { setIsProcessing(false); }
     }
   };
+
+  // 🔊 SISTEMA DE ALERTA DE SONIDO (NUEVO)
+  useEffect(() => {
+    // 1. Si no hay mensajes, salir
+    if (messages.length === 0) return;
+
+    // 2. Revisar el último mensaje
+    const lastMsg = messages[messages.length - 1];
+
+    // 3. Solo si es de la IA y tiene palabras de alerta
+    if (lastMsg.role === 'ai') {
+      const palabrasPeligro = ["warning", "alert", "peligro", "cuidado", "atención", "advertencia", "detected", "detectado"];
+      
+      const esPeligroso = palabrasPeligro.some(p => 
+        lastMsg.text.toLowerCase().includes(p)
+      );
+
+      if (esPeligroso) {
+        console.log("🔊 Alerta de sonido activada");
+        // Asegúrate de que alerta.mp3 esté en la carpeta /public
+        const audio = new Audio('/alerta.mp3');
+        audio.volume = 1.0;
+        audio.play().catch(e => console.error("Error audio (Interactúa con la página primero):", e));
+      }
+    }
+  }, [messages]);
 
   return (
     // ✨ FIX 1: Cambiado 'h-screen' a 'h-[100dvh]' para que se ajuste perfecto en celulares
@@ -410,9 +436,9 @@ export default function KorsikaHome() {
                                 </div>
                                 
                                 {msg.type === 'music' && (
-                                    <div className="mt-2 w-full max-w-xs bg-black/40 border border-green-500/30 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition" onClick={() => window.open(`https://open.spotify.com/search/${encodeURIComponent(msg.metadata || '')}`, '_blank')}>
-                                        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-black"><Music size={20}/></div>
-                                        <div className="overflow-hidden"><p className="text-xs font-bold text-white truncate">Spotify</p><p className="text-[10px] text-gray-400 truncate">{msg.metadata}</p></div>
+                                    <div className="mt-2 w-full max-w-xs bg-black/40 border border-green-500/30 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition" onClick={() => window.open(`https://open.spotify.com/search/$${encodeURIComponent(msg.metadata || '')}`, '_blank')}>
+                                            <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-black"><Music size={20}/></div>
+                                            <div className="overflow-hidden"><p className="text-xs font-bold text-white truncate">Spotify</p><p className="text-[10px] text-gray-400 truncate">{msg.metadata}</p></div>
                                     </div>
                                 )}
 

@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(apiKey);
 // 👁️ ROAD ANALYSIS
 export async function analyzeRoadImage(imageBase64: string) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
     const result = await model.generateContent([
