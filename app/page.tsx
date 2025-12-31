@@ -191,7 +191,8 @@ export default function KorsikaHome() {
       const alertText = `🔔 Mensaje de ${sender}: "${msgText}"`;
       addMessage('ai', alertText, 'text');
       if (status === 'connected') {
-          await conversation.sendMessage(`[SYSTEM ALERT] Notificación de ${sender}: "${msgText}".`);
+          // @ts-ignore
+          await (conversation as any).sendMessage(`[SYSTEM ALERT] Notificación de ${sender}: "${msgText}".`);
       }
   };
 
@@ -273,8 +274,8 @@ export default function KorsikaHome() {
                     initial={{ height: 0 }} animate={{ height: "40%" }} exit={{ height: 0 }}
                     className="md:hidden w-full relative border-b border-white/10 bg-black/20 backdrop-blur-lg"
                 >
-                     <button onClick={() => setActiveNavigation(null)} className="absolute top-2 right-2 z-20 p-2 bg-black/50 rounded-full text-white"><Minimize2 size={16}/></button>
-                     <iframe 
+                      <button onClick={() => setActiveNavigation(null)} className="absolute top-2 right-2 z-20 p-2 bg-black/50 rounded-full text-white"><Minimize2 size={16}/></button>
+                      <iframe 
                         width="100%" height="100%" frameBorder="0" loading="eager" allowFullScreen 
                         style={{ border: 0, filter: 'grayscale(20%) invert(90%) contrast(110%)' }} 
                         src={`https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_KEY}&origin=${userLocation || "current+location"}&destination=${encodeURIComponent(activeNavigation.destination)}&mode=driving`}>
